@@ -6,4 +6,5 @@ matplotlib
 streamlit
 streamlit-option-menu
 openpyxl
+st-aggrid
 
