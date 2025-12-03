@@ -1,90 +1,121 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+import seaborn as sns
+import matplotlib.pyplot as plt
+import numpy as np
 
-st.set_page_config(page_title="GlobalSuite Lite", layout="wide")
+from streamlit_option_menu import option_menu
 
-st.title("🌐 GlobalSuite Lite – MVP")
+# ======================
+#   ESTILO GLOBAL
+# ======================
+st.set_page_config(layout="wide")
 
-# ---- Sidebar ----
-menu = st.sidebar.selectbox(
-    "Módulo", 
-    ["Dashboard", "Activos", "Riesgos", "Controles ISO 27001"]
-)
+st.markdown("""
+<style>
+    .block-container {padding-top: 1rem;}
+    .small-text {font-size:13px; color:#888;}
+    .big-number {font-size:40px; font-weight:600; margin-top:-10px;}
+    .metric-card {
+        background: #fff;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        text-align:center;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# ---- Base de datos en memoria ----
-if "activos" not in st.session_state:
-    st.session_state.activos = pd.DataFrame(columns=["Nombre", "Tipo", "Valor"])
+# ======================
+#   SIDEBAR – ICONOS
+# ======================
+with st.sidebar:
+    selected = option_menu(
+        menu_title="GlobalSuite Lite",
+        options=["Inicio", "Análisis", "Planes", "Gestión", "Scorecard", "Auditoría"],
+        icons=["house", "graph-up", "clipboard-check", "hammer", "bar-chart", "search"],
+        menu_icon="shield-check",
+        default_index=1,
+    )
 
-if "riesgos" not in st.session_state:
-    st.session_state.riesgos = pd.DataFrame(columns=["Riesgo", "Prob", "Impacto", "Nivel"])
+st.title("🔎 Análisis de Riesgos – Dashboard")
 
-if "controles" not in st.session_state:
-    st.session_state.controles = pd.DataFrame({
-        "Control": [
-            "5.1 Políticas de seguridad",
-            "5.2 Roles y responsabilidades",
-            "8.1 Gestión de activos",
-            "8.3 Gestión de medios removibles"
-        ],
-        "Implementado": [False, False, False, False]
-    })
+# ======================
+#   BARRA DE FILTROS
+# ======================
+st.subheader("Filtros de análisis")
 
-# ---- Dashboard ----
-if menu == "Dashboard":
-    st.header("📊 Dashboard general")
+col1, col2, col3, col4 = st.columns(4)
+anal = col1.selectbox("Análisis", ["Todos", "ISO 27005", "ISO 31000"])
+metod = col2.selectbox("Metodología", ["Todos", "Cualitativa", "Cuantitativa"])
+categoria = col3.selectbox("Categoría", ["Todas", "TI", "Finanzas", "Operaciones"])
+dimension = col4.selectbox("Dimensión", ["Todas", "Confidencialidad", "Integridad", "Disponibilidad"])
 
-    col1,col2,col3 = st.columns(3)
-    col1.metric("Activos", len(st.session_state.activos))
-    col2.metric("Riesgos", len(st.session_state.riesgos))
-    col3.metric("Controles", len(st.session_state.controles))
+st.write("---")
 
-    if len(st.session_state.riesgos) > 0:
-        st.subheader("Matriz de riesgo")
-        st.dataframe(st.session_state.riesgos)
+# ======================
+#   MATRIZ DE CALOR
+# ======================
+st.subheader("📊 Matriz Probabilidad x Impacto")
 
-# ---- Activos ----
-elif menu == "Activos":
-    st.header("🗂 Gestión de activos")
+prob_labels = ["Muy bajo", "Bajo", "Medio", "Alto", "Muy alto"]
 
-    with st.form("nuevo_activo"):
-        nombre = st.text_input("Nombre del activo")
-        tipo = st.selectbox("Tipo", ["Información", "Hardware", "Persona", "Software"])
-        valor = st.slider("Valor", 1, 5)
-        submit = st.form_submit_button("Agregar")
+matrix = np.array([
+    [2, 4, 8, 12, 18],
+    [4, 8, 12, 16, 20],
+    [6, 10, 14, 20, 24],
+    [10, 14, 20, 26, 30],
+    [12, 18, 24, 30, 36],
+])
 
-    if submit:
-        st.session_state.activos.loc[len(st.session_state.activos)] = [nombre, tipo, valor]
-        st.success("Activo agregado correctamente")
+fig, ax = plt.subplots(figsize=(7, 4))
+sns.heatmap(matrix, cmap="RdYlGn_r", annot=True, fmt="d",
+            xticklabels=prob_labels, yticklabels=prob_labels,
+            ax=ax)
+st.pyplot(fig)
 
-    st.dataframe(st.session_state.activos)
+# ======================
+#   KPI + GRÁFICOS
+# ======================
+colA, colB, colC = st.columns([1,1,1])
 
-# ---- Riesgos ----
-elif menu == "Riesgos":
-    st.header("⚠️ Gestión de riesgos")
+with colA:
+    st.subheader("Supera NRA")
+    st.markdown('<div class="metric-card"><div class="big-number">464</div><div class="small-text">de 1236</div></div>',
+                unsafe_allow_html=True)
 
-    with st.form("nuevo_riesgo"):
-        riesgo = st.text_input("Descripción del riesgo")
-        prob = st.slider("Probabilidad", 1, 5)
-        impacto = st.slider("Impacto", 1, 5)
-        nivel = prob * impacto
-        submit = st.form_submit_button("Agregar")
+with colB:
+    st.subheader("Distribución de Riesgos")
+    pie = px.pie(values=[40, 25, 20, 10, 5],
+                 names=["Muy alto","Alto","Medio","Bajo","Muy bajo"],
+                 color_discrete_sequence=px.colors.qualitative.Set2)
+    st.plotly_chart(pie, use_container_width=True)
 
-    if submit:
-        st.session_state.riesgos.loc[len(st.session_state.riesgos)] = [riesgo, prob, impacto, nivel]
-        st.success("Riesgo agregado")
+with colC:
+    st.subheader("Mapa de riesgo")
+    tree = px.treemap(
+        names=["Muy alto","Alto","Medio","Bajo","Muy bajo"],
+        parents=["","", "", "", ""],
+        values=[36,30,20,10,4],
+        color=[5,4,3,2,1],
+        color_continuous_scale="RdYlGn_r"
+    )
+    st.plotly_chart(tree, use_container_width=True)
 
-    st.dataframe(st.session_state.riesgos)
+# ======================
+#   TABLA DE DATOS
+# ======================
+st.write("---")
+st.subheader("📋 Resultados de análisis")
 
-# ---- Controles ----
-elif menu == "Controles ISO 27001":
-    st.header("🛡️ Controles ISO 27001 (Lite)")
+df_demo = pd.DataFrame({
+    "Análisis": ["Ciberseguridad"]*8,
+    "Elemento": ["AWS","App","Cita Previa","Aceso a Internet","Nóminas","Ciudadano","Operación","Banca Privada"],
+    "Riesgo": ["A.11 Acceso no autorizado"]*8,
+    "Nivel dimensión": ["Alto"]*8,
+    "Nivel": ["Muy alto"]*8,
+    "NRA": ["Medio"]*8
+})
 
-    controles = st.session_state.controles
-
-    for i in range(len(controles)):
-        controles.at[i, "Implementado"] = st.checkbox(
-            label=controles.at[i, "Control"],
-            value=controles.at[i, "Implementado"]
-        )
-
-    st.dataframe(controles)
+st.dataframe(df_demo, use_container_width=True, height=350)
