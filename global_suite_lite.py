@@ -120,11 +120,25 @@ if file is not None:
                 
                 # 1) FILTROS PARA TEXTO O COLUMNAS CATEGÓRICAS
                 if df[col].dtype == object or df[col].nunique() < 20:
-                    vals = st.multiselect(
+                    unique_vals = df[col].dropna().unique()
+                    
+                    # Convertimos a string solo para ordenar y mostrar
+                    unique_vals_str = sorted([str(v) for v in unique_vals])
+                    
+                    # Creamos diccionario para mapear string → valor real original
+                    val_map = {str(v): v for v in unique_vals}
+                    
+                    selected_str = st.multiselect(
                         f"Filtrar {col}:",
-                        sorted(df[col].dropna().unique()),
-                        default=list(df[col].dropna().unique())
+                        unique_vals_str,
+                        default=unique_vals_str
                     )
+                    
+                    # Convertimos selección de string → valores reales
+                    selected_real = [val_map[s] for s in selected_str]
+                    
+                    filtered_df = filtered_df[filtered_df[col].isin(selected_real)]
+
                     filtered_df = filtered_df[filtered_df[col].isin(vals)]
                     continue
             
@@ -222,6 +236,7 @@ df_demo = pd.DataFrame({
 })
 
 st.dataframe(df_demo, use_container_width=True, height=350)
+
 
 
 
