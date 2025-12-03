@@ -96,10 +96,10 @@ if not st.session_state.auth:
     st.stop()
 
 # ======================
-#   CARGAR EXCEL + FILTROS DINÁMICOS
+#   TEST: Cargar y mostrar el Excel crudo
 # ======================
 st.write("---")
-st.subheader("📋 Cargar matriz de riesgos")
+st.subheader("📋 Test: cargar Excel y mostrar la tabla original (sin filtros)")
 
 file = st.file_uploader("📂 Subir Excel (.xlsx, .xls, .xlsm)", type=["xlsx", "xls", "xlsm"])
 
@@ -109,144 +109,29 @@ if file is not None:
 
         st.success("Archivo cargado correctamente")
 
-        # Conversión segura a datetime donde se pueda
+        st.write("### 🧪 Vista previa del DataFrame cargado (primeras 50 filas):")
+        st.dataframe(df.head(50), use_container_width=True, height=400)
+
+        st.write("### 🧪 Dimensiones del archivo:")
+        st.write(f"Filas: {df.shape[0]}, Columnas: {df.shape[1]}")
+
+        st.write("### 🧪 Nombres de columnas detectadas:")
+        st.write(list(df.columns))
+
+        st.write("### 🧪 Tipos detectados:")
+        st.write(df.dtypes)
+
+        st.write("### 🧪 5 valores de cada columna:")
         for col in df.columns:
-            try:
-                df[col] = pd.to_datetime(df[col])
-            except:
-                pass
-
-        st.write("---")
-        st.subheader("🎚 Segmentadores automáticos (modo PowerBI)")
-
-        # Aquí guardaremos las selecciones
-        user_filters = {}
-
-        # ============================
-        #   1) CONSTRUIR WIDGETS SIN FILTRAR
-        # ============================
-        with st.expander("Mostrar / Ocultar filtros"):
-
-            for col in df.columns:
-                col_series = df[col]
-
-                # ------------------------------
-                # 1) TEXTO / CATEGORÍAS
-                # ------------------------------
-                if col_series.dtype == object or col_series.nunique() < 20:
-                    unique_vals = list(col_series.dropna().unique())
-                    unique_vals_str = sorted([str(v) for v in unique_vals])
-                    val_map = {str(v): v for v in unique_vals}
-
-                    selected_str = st.multiselect(
-                        f"Filtrar {col}:",
-                        unique_vals_str,
-                        default=unique_vals_str
-                    )
-                    user_filters[col] = ("category", [val_map[s] for s in selected_str])
-                    continue
-
-                # ------------------------------
-                # 2) FECHAS
-                # ------------------------------
-                if np.issubdtype(col_series.dtype, np.datetime64):
-                    min_date = col_series.min()
-                    max_date = col_series.max()
-
-                    date_tuple = st.date_input(
-                        f"Rango de fechas para {col}:",
-                        (min_date, max_date)
-                    )
-                    user_filters[col] = ("date", date_tuple)
-                    continue
-
-                # ------------------------------
-                # 3) NUMÉRICOS
-                # ------------------------------
-                try:
-                    min_val = float(col_series.min())
-                    max_val = float(col_series.max())
-
-                    sel_min, sel_max = st.slider(
-                        f"Rango para {col}:",
-                        min_val, max_val,
-                        (min_val, max_val)
-                    )
-                    user_filters[col] = ("numeric", (sel_min, sel_max))
-                    continue
-
-                except:
-                    # Tipos mixtos → tratar como categoría
-                    unique_vals = list(col_series.dropna().unique())
-                    unique_vals_str = sorted([str(v) for v in unique_vals])
-                    val_map = {str(v): v for v in unique_vals}
-
-                    selected_str = st.multiselect(
-                        f"Filtrar {col}:",
-                        unique_vals_str,
-                        default=unique_vals_str
-                    )
-                    user_filters[col] = ("category", [val_map[s] for s in selected_str])
-                    continue
-
-        # ============================
-        #   2) APLICAR FILTROS EN UN SOLO PASO (PowerBI)
-        # ============================
-        filtered_df = df.copy()
-
-        for col, (ftype, fval) in user_filters.items():
-            series = filtered_df[col]
-
-            if ftype == "category":
-                filtered_df = filtered_df[series.isin(fval)]
-
-            elif ftype == "date":
-                start, end = fval
-                start = pd.to_datetime(start)
-                end = pd.to_datetime(end)
-                filtered_df = filtered_df[
-                    (series >= start) & (series <= end)
-                ]
-
-            elif ftype == "numeric":
-                low, high = fval
-                filtered_df = filtered_df[
-                    (series >= low) & (series <= high)
-                ]
-
-        # ============================
-        #   3) SLIDER PARA RECORRER FILAS
-        # ============================
-        st.write("---")
-        st.subheader("📌 Recorrer filas filtradas")
-
-        total_rows = len(filtered_df)
-
-        if total_rows == 0:
-            st.error("❌ No se encontraron filas con los filtros seleccionados.")
-        else:
-            default_end = min(50, total_rows)
-
-            row_start, row_end = st.slider(
-                "Selecciona rango de filas:",
-                0, total_rows,
-                (0, default_end),
-                step=1
-            )
-
-            if row_start == row_end:
-                row_end = min(row_start + 1, total_rows)
-
-            subset_df = filtered_df.iloc[row_start:row_end]
-
-            st.dataframe(subset_df, use_container_width=True, height=450)
+            st.write(f"Columna: **{col}**")
+            st.write(df[col].dropna().unique()[:5])
 
     except Exception as e:
-        st.error("Error al procesar el Excel.")
+        st.error("❌ Error al procesar el archivo.")
         st.exception(e)
 
 else:
-    st.info("Sube un archivo Excel para comenzar.")
+    st.info("Sube un archivo Excel para probar la carga de datos.")
 
 # ======================
 #   KPI + GRÁFICOS (inalterado)
@@ -294,3 +179,4 @@ df_demo = pd.DataFrame({
 })
 
 st.dataframe(df_demo, use_container_width=True, height=350)
+
