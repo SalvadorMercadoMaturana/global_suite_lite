@@ -103,11 +103,11 @@ if not st.session_state.auth:
 st.write("---")
 st.subheader("📋 Cargar matriz de riesgos")
 
-file = st.file_uploader("📂 Subir Excel de riesgos", type=["xlsx", "xls"])
+file = st.file_uploader("📂 Subir Excel de riesgos", type=["xlsx", "xls", "xlsm"])
 
 if file is not None:
     try:
-        df = pd.read_excel(file)
+        df = pd.read_excel(file, sheet_name="Matriz", engine="openpyxl")
         st.success("Archivo cargado correctamente")
 
         st.write("---")
@@ -202,4 +202,5 @@ df_demo = pd.DataFrame({
 })
 
 st.dataframe(df_demo, use_container_width=True, height=350)
+
 
