@@ -76,6 +76,89 @@ sns.heatmap(matrix, cmap="RdYlGn_r", annot=True, fmt="d",
 st.pyplot(fig)
 
 # ======================
+#   CONTRASEÑA DE ACCESO
+# ======================
+PASSWORD = "admin123"   # cámbiala aquí
+
+if "auth" not in st.session_state:
+    st.session_state.auth = False
+
+def login():
+    pwd = st.text_input("Ingrese contraseña:", type="password")
+    if st.button("Acceder"):
+        if pwd == PASSWORD:
+            st.session_state.auth = True
+            st.success("Acceso concedido")
+        else:
+            st.error("Contraseña incorrecta")
+
+if not st.session_state.auth:
+    st.title("🔐 Acceso restringido al dashboard")
+    login()
+    st.stop()
+
+# ======================
+#   SECCIÓN DE TABLA + EXCEL
+# ======================
+st.write("---")
+st.subheader("📋 Cargar matriz de riesgos")
+
+file = st.file_uploader("📂 Subir Excel de riesgos", type=["xlsx", "xls"])
+
+if file is not None:
+    try:
+        df = pd.read_excel(file)
+        st.success("Archivo cargado correctamente")
+
+        st.write("---")
+        st.subheader("🎚 Segmentadores automáticos")
+
+        filtered_df = df.copy()
+
+        with st.expander("Mostrar / Ocultar filtros"):
+            for col in df.columns:
+
+                # Si la columna tiene pocos valores, multiselect
+                if df[col].dtype == object or df[col].nunique() < 20:
+                    vals = st.multiselect(
+                        f"Filtrar {col}:",
+                        df[col].dropna().unique(),
+                        default=list(df[col].dropna().unique())
+                    )
+                    filtered_df = filtered_df[filtered_df[col].isin(vals)]
+
+                else:
+                    # Si es numérica: slider rango
+                    min_val = float(df[col].min())
+                    max_val = float(df[col].max())
+                    sel_min, sel_max = st.slider(
+                        f"Rango para {col}:",
+                        min_val, max_val,
+                        (min_val, max_val)
+                    )
+                    filtered_df = filtered_df[
+                        (filtered_df[col] >= sel_min) &
+                        (filtered_df[col] <= sel_max)
+                    ]
+
+        st.write("---")
+        st.subheader("📊 Vista de tabla filtrada")
+
+        st.dataframe(
+            filtered_df,
+            use_container_width=True,
+            height=400,
+            hide_index=True
+        )
+
+    except Exception as e:
+        st.error("Error al cargar el archivo. Verifique que sea un Excel válido.")
+        st.exception(e)
+
+else:
+    st.info("Sube un archivo Excel para ver la tabla y los segmentadores.")
+
+# ======================
 #   KPI + GRÁFICOS
 # ======================
 colA, colB, colC = st.columns([1,1,1])
@@ -119,3 +202,4 @@ df_demo = pd.DataFrame({
 })
 
 st.dataframe(df_demo, use_container_width=True, height=350)
+
