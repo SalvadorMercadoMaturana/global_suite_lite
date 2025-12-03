@@ -28,7 +28,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ======================
-#   SIDEBAR – ICONOS
+#   SIDEBAR
 # ======================
 with st.sidebar:
     selected = option_menu(
@@ -42,15 +42,15 @@ with st.sidebar:
 st.title("🔎 Análisis de Riesgos – Dashboard")
 
 # ======================
-#   BARRA DE FILTROS
+#   BARRA DE FILTROS (NO AFECTA LA TABLA)
 # ======================
 st.subheader("Filtros de análisis")
 
 col1, col2, col3, col4 = st.columns(4)
-anal = col1.selectbox("Análisis", ["Todos", "ISO 27005", "ISO 31000"])
-metod = col2.selectbox("Metodología", ["Todos", "Cualitativa", "Cuantitativa"])
-categoria = col3.selectbox("Categoría", ["Todas", "TI", "Finanzas", "Operaciones"])
-dimension = col4.selectbox("Dimensión", ["Todas", "Confidencialidad", "Integridad", "Disponibilidad"])
+col1.selectbox("Análisis", ["Todos", "ISO 27005", "ISO 31000"])
+col2.selectbox("Metodología", ["Todos", "Cualitativa", "Cuantitativa"])
+col3.selectbox("Categoría", ["Todas", "TI", "Finanzas", "Operaciones"])
+col4.selectbox("Dimensión", ["Todas", "Confidencialidad", "Integridad", "Disponibilidad"])
 
 st.write("---")
 
@@ -60,7 +60,6 @@ st.write("---")
 st.subheader("📊 Matriz Probabilidad x Impacto")
 
 prob_labels = ["Muy bajo", "Bajo", "Medio", "Alto", "Muy alto"]
-
 matrix = np.array([
     [2, 4, 8, 12, 18],
     [4, 8, 12, 16, 20],
@@ -76,7 +75,7 @@ sns.heatmap(matrix, cmap="RdYlGn_r", annot=True, fmt="d",
 st.pyplot(fig)
 
 # ======================
-#   CONTRASEÑA DE ACCESO
+#   CONTRASEÑA
 # ======================
 PASSWORD = "admin123"
 
@@ -88,7 +87,6 @@ def login():
     if st.button("Acceder"):
         if pwd == PASSWORD:
             st.session_state.auth = True
-            st.success("Acceso concedido")
         else:
             st.error("Contraseña incorrecta")
 
@@ -98,25 +96,16 @@ if not st.session_state.auth:
     st.stop()
 
 # ======================
-#   SECCIÓN DE TABLA + EXCEL
+#   CARGAR EXCEL
 # ======================
 st.write("---")
 st.subheader("📋 Cargar matriz de riesgos")
 
-file = st.file_uploader("📂 Subir Excel de riesgos", type=["xlsx", "xls", "xlsm"])
+file = st.file_uploader("📂 Subir Excel", type=["xlsx", "xls", "xlsm"])
 
 if file is not None:
     try:
         df = pd.read_excel(file, engine="openpyxl")
-
-        # Forzamos conversión segura a datetime donde aplique
-        for col in df.columns:
-            if df[col].dtype == object:
-                try:
-                    df[col] = pd.to_datetime(df[col])
-                except:
-                    pass
-
         st.success("Archivo cargado correctamente")
 
         st.write("---")
@@ -127,23 +116,25 @@ if file is not None:
         with st.expander("Mostrar / Ocultar filtros"):
 
             for col in df.columns:
-                series = df[col]
+                series = filtered_df[col]  # clave: siempre desde filtered_df
 
                 # ================================================
-                # 1) TEXTO / CATEGÓRICAS
+                # 1) TEXTO / CATEGÓRICOS
                 # ================================================
                 if series.dtype == object or series.nunique() < 20:
-                    unique_vals = series.dropna().unique()
+
+                    unique_vals = list(series.dropna().unique())
                     unique_vals_str = sorted([str(v) for v in unique_vals])
                     val_map = {str(v): v for v in unique_vals}
 
                     selected_str = st.multiselect(
                         f"Filtrar {col}:",
                         unique_vals_str,
-                        default=unique_vals_str
+                        unique_vals_str
                     )
 
                     selected_real = [val_map[s] for s in selected_str]
+
                     filtered_df = filtered_df[filtered_df[col].isin(selected_real)]
                     continue
 
@@ -151,16 +142,17 @@ if file is not None:
                 # 2) FECHAS
                 # ================================================
                 if np.issubdtype(series.dtype, np.datetime64):
+
                     min_date = series.min()
                     max_date = series.max()
 
-                    date_range = st.date_input(
+                    date_tuple = st.date_input(
                         f"Rango de fechas para {col}:",
                         (min_date, max_date)
                     )
 
-                    if isinstance(date_range, tuple) and len(date_range) == 2:
-                        start, end = date_range
+                    if isinstance(date_tuple, tuple):
+                        start, end = date_tuple
                         filtered_df = filtered_df[
                             (series >= pd.to_datetime(start)) &
                             (series <= pd.to_datetime(end))
@@ -186,109 +178,52 @@ if file is not None:
                     continue
 
                 except:
-                    # Tipos mixtos → tratar como texto
-                    unique_vals = series.dropna().unique()
+                    # TIPOS MIXTOS — tratar como texto
+                    unique_vals = list(series.dropna().unique())
                     unique_vals_str = sorted([str(v) for v in unique_vals])
                     val_map = {str(v): v for v in unique_vals}
 
                     selected_str = st.multiselect(
                         f"Filtrar {col}:",
                         unique_vals_str,
-                        default=unique_vals_str
+                        unique_vals_str
                     )
 
                     selected_real = [val_map[s] for s in selected_str]
+
                     filtered_df = filtered_df[filtered_df[col].isin(selected_real)]
                     continue
 
+        # ======================
+        #   SLIDER DE FILAS
+        # ======================
         st.write("---")
-        st.subheader("📊 Vista de tabla filtrada")
-
-        # ======================
-        #   SLIDER PARA RECORRER FILAS
-        # ======================
-        st.subheader("📌 Recorrer filas según filtros aplicados")
+        st.subheader("📌 Recorrer filas filtradas")
 
         total_rows = len(filtered_df)
 
         if total_rows == 0:
-            st.warning("No hay filas para mostrar. Prueba quitando algunos filtros.")
+            st.warning("No hay filas para mostrar. Quita o modifica los filtros.")
         else:
             default_end = min(50, total_rows)
 
             row_start, row_end = st.slider(
                 "Selecciona rango de filas:",
-                min_value=0,
-                max_value=total_rows,
-                value=(0, default_end),
+                0, total_rows,
+                (0, default_end),
                 step=1
             )
 
             if row_start == row_end:
                 row_end = min(row_start + 1, total_rows)
 
-            subset_df = filtered_df.iloc[row_start:row_end].copy()
+            subset_df = filtered_df.iloc[row_start:row_end]
 
-            st.dataframe(
-                subset_df,
-                use_container_width=True,
-                height=450,
-                hide_index=True
-            )
+            st.dataframe(subset_df, use_container_width=True, height=450)
 
     except Exception as e:
-        st.error("Error al cargar el archivo. Verifique que sea un Excel válido.")
+        st.error("Error al procesar el archivo.")
         st.exception(e)
 
 else:
-    st.info("Sube un archivo Excel para ver la tabla y los segmentadores.")
-
-# ======================
-#   KPI + GRÁFICOS
-# ======================
-colA, colB, colC = st.columns([1,1,1])
-
-with colA:
-    st.subheader("Supera NRA")
-    st.markdown(
-        '<div class="metric-card"><div class="big-number">464</div><div class="small-text">de 1236</div></div>',
-        unsafe_allow_html=True
-    )
-
-with colB:
-    st.subheader("Distribución de Riesgos")
-    pie = px.pie(values=[40, 25, 20, 10, 5],
-                 names=["Muy alto","Alto","Medio","Bajo","Muy bajo"],
-                 color_discrete_sequence=px.colors.qualitative.Set2)
-    st.plotly_chart(pie, use_container_width=True)
-
-with colC:
-    st.subheader("Mapa de riesgo")
-    tree = px.treemap(
-        names=["Muy alto","Alto","Medio","Bajo","Muy bajo"],
-        parents=["","", "", "", ""],
-        values=[36,30,20,10,4],
-        color=[5,4,3,2,1],
-        color_continuous_scale="RdYlGn_r"
-    )
-    st.plotly_chart(tree, use_container_width=True)
-
-# ======================
-#   TABLA DEMO FINAL
-# ======================
-st.write("---")
-st.subheader("📋 Resultados de análisis")
-
-df_demo = pd.DataFrame({
-    "Análisis": ["Ciberseguridad"]*8,
-    "Elemento": ["AWS","App","Cita Previa","Aceso a Internet","Nóminas","Ciudadano","Operación","Banca Privada"],
-    "Riesgo": ["A.11 Acceso no autorizado"]*8,
-    "Nivel dimensión": ["Alto"]*8,
-    "Nivel": ["Muy alto"]*8,
-    "NRA": ["Medio"]*8
-})
-
-st.dataframe(df_demo, use_container_width=True, height=350)
-
-
-
+    st.info("Sube un archivo Excel para comenzar.")
