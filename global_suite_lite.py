@@ -28,31 +28,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ======================
-#   SIDEBAR – ICONOS
+#   SIDEBAR
 # ======================
 with st.sidebar:
     selected = option_menu(
-        menu_title="GlobalSuite Lite",
-        options=["Inicio", "Análisis", "Planes", "Gestión", "Scorecard", "Auditoría"],
+        "GlobalSuite Lite",
+        ["Inicio", "Análisis", "Planes", "Gestión", "Scorecard", "Auditoría"],
         icons=["house", "graph-up", "clipboard-check", "hammer", "bar-chart", "search"],
         menu_icon="shield-check",
         default_index=1,
     )
 
 st.title("🔎 Análisis de Riesgos – Dashboard")
-
-# ======================
-#   BARRA DE FILTROS (filtros visuales)
-# ======================
-st.subheader("Filtros de análisis")
-
-col1, col2, col3, col4 = st.columns(4)
-col1.selectbox("Análisis", ["Todos", "ISO 27005", "ISO 31000"])
-col2.selectbox("Metodología", ["Todos", "Cualitativa", "Cuantitativa"])
-col3.selectbox("Categoría", ["Todas", "TI", "Finanzas", "Operaciones"])
-col4.selectbox("Dimensión", ["Todas", "Confidencialidad", "Integridad", "Disponibilidad"])
-
-st.write("---")
 
 # ======================
 #   MATRIZ DE CALOR
@@ -70,8 +57,7 @@ matrix = np.array([
 
 fig, ax = plt.subplots(figsize=(7, 4))
 sns.heatmap(matrix, cmap="RdYlGn_r", annot=True, fmt="d",
-            xticklabels=prob_labels, yticklabels=prob_labels,
-            ax=ax)
+            xticklabels=prob_labels, yticklabels=prob_labels, ax=ax)
 st.pyplot(fig)
 
 # ======================
@@ -82,26 +68,22 @@ PASSWORD = "admin123"
 if "auth" not in st.session_state:
     st.session_state.auth = False
 
-def login():
+if not st.session_state.auth:
     pwd = st.text_input("Ingrese contraseña:", type="password")
     if st.button("Acceder"):
         if pwd == PASSWORD:
             st.session_state.auth = True
         else:
             st.error("Contraseña incorrecta")
-
-if not st.session_state.auth:
-    st.title("🔐 Acceso restringido al dashboard")
-    login()
     st.stop()
 
 # ======================
-#   TEST: Cargar y mostrar el Excel crudo
+#   CARGAR EXCEL
 # ======================
 st.write("---")
-st.subheader("📋 Test: cargar Excel y mostrar la tabla original (sin filtros)")
+st.subheader("📋 Cargar matriz de riesgos")
 
-file = st.file_uploader("📂 Subir Excel (.xlsx, .xls, .xlsm)", type=["xlsx", "xls", "xlsm"])
+file = st.file_uploader("📂 Subir Excel", type=["xlsx", "xls", "xlsm"])
 
 if file is not None:
     try:
@@ -109,74 +91,91 @@ if file is not None:
 
         st.success("Archivo cargado correctamente")
 
-        st.write("### 🧪 Vista previa del DataFrame cargado (primeras 50 filas):")
-        st.dataframe(df.head(50), use_container_width=True, height=400)
-
-        st.write("### 🧪 Dimensiones del archivo:")
-        st.write(f"Filas: {df.shape[0]}, Columnas: {df.shape[1]}")
-
-        st.write("### 🧪 Nombres de columnas detectadas:")
-        st.write(list(df.columns))
-
-        st.write("### 🧪 Tipos detectados:")
-        st.write(df.dtypes)
-
-        st.write("### 🧪 5 valores de cada columna:")
+        # ============================
+        # NORMALIZAR TIPOS PARA QUE NO PETE
+        # ============================
         for col in df.columns:
-            st.write(f"Columna: **{col}**")
-            st.write(df[col].dropna().unique()[:5])
+            # convertir fechas si se puede
+            try:
+                df[col] = pd.to_datetime(df[col], errors="ignore")
+            except:
+                pass
+
+        st.write("---")
+        st.subheader("🎚 Segmentadores automáticos (modo PowerBI)")
+
+        user_filters = {}  # buffer de filtros
+
+        # ============================
+        # 1) CREAR WIDGETS SIN FILTRAR
+        # ============================
+        with st.expander("Mostrar / Ocultar filtros"):
+            for col in df.columns:
+                col_series = df[col]
+
+                # ----- FECHAS -----
+                if np.issubdtype(col_series.dtype, np.datetime64):
+                    min_d, max_d = col_series.min(), col_series.max()
+                    date_range = st.date_input(f"{col} (fecha):", (min_d, max_d))
+                    user_filters[col] = ("date", date_range)
+                    continue
+
+                # ----- NUMÉRICOS REALES -----
+                if np.issubdtype(col_series.dtype, np.number) and col_series.notna().all():
+                    min_v, max_v = float(col_series.min()), float(col_series.max())
+                    sel_min, sel_max = st.slider(
+                        f"{col} (num):", min_v, max_v, (min_v, max_v)
+                    )
+                    user_filters[col] = ("numeric", (sel_min, sel_max))
+                    continue
+
+                # ----- TEXTO / MIXTOS -----
+                unique_vals = sorted(col_series.dropna().astype(str).unique())
+                selected = st.multiselect(f"{col} (texto):", unique_vals, unique_vals)
+                user_filters[col] = ("text", selected)
+
+        # ============================
+        # 2) APLICAR FILTROS EN UN SOLO PASO
+        # ============================
+        filtered_df = df.copy()
+
+        for col, (ftype, filt) in user_filters.items():
+            series = filtered_df[col]
+
+            if ftype == "text":
+                filtered_df = filtered_df[series.astype(str).isin(filt)]
+
+            elif ftype == "numeric":
+                lo, hi = filt
+                filtered_df = filtered_df[(series >= lo) & (series <= hi)]
+
+            elif ftype == "date":
+                start, end = filt
+                start, end = pd.to_datetime(start), pd.to_datetime(end)
+                filtered_df = filtered_df[(series >= start) & (series <= end)]
+
+        # ============================
+        # 3) SLIDER PARA RECORRER FILAS
+        # ============================
+        st.write("---")
+        st.subheader("📌 Recorrer filas filtradas")
+
+        total = len(filtered_df)
+
+        if total == 0:
+            st.error("❌ No se encontraron filas con los filtros seleccionados.")
+        else:
+            end_default = min(50, total)
+            a, b = st.slider("Rango de filas:", 0, total, (0, end_default))
+
+            if a == b:
+                b = min(a + 1, total)
+
+            st.dataframe(filtered_df.iloc[a:b], use_container_width=True, height=450)
 
     except Exception as e:
-        st.error("❌ Error al procesar el archivo.")
+        st.error("Error al procesar el Excel")
         st.exception(e)
 
 else:
-    st.info("Sube un archivo Excel para probar la carga de datos.")
-
-# ======================
-#   KPI + GRÁFICOS (inalterado)
-# ======================
-colA, colB, colC = st.columns([1,1,1])
-
-with colA:
-    st.subheader("Supera NRA")
-    st.markdown(
-        '<div class="metric-card"><div class="big-number">464</div><div class="small-text">de 1236</div></div>',
-        unsafe_allow_html=True
-    )
-
-with colB:
-    st.subheader("Distribución de Riesgos")
-    pie = px.pie(values=[40, 25, 20, 10, 5],
-                 names=["Muy alto","Alto","Medio","Bajo","Muy bajo"],
-                 color_discrete_sequence=px.colors.qualitative.Set2)
-    st.plotly_chart(pie, use_container_width=True)
-
-with colC:
-    st.subheader("Mapa de riesgo")
-    tree = px.treemap(
-        names=["Muy alto","Alto","Medio","Bajo","Muy bajo"],
-        parents=["","", "", "", ""],
-        values=[36,30,20,10,4],
-        color=[5,4,3,2,1],
-        color_continuous_scale="RdYlGn_r"
-    )
-    st.plotly_chart(tree, use_container_width=True)
-
-# ======================
-#   TABLA DEMO FINAL
-# ======================
-st.write("---")
-st.subheader("📋 Resultados de análisis")
-
-df_demo = pd.DataFrame({
-    "Análisis": ["Ciberseguridad"]*8,
-    "Elemento": ["AWS","App","Cita Previa","Aceso a Internet","Nóminas","Ciudadano","Operación","Banca Privada"],
-    "Riesgo": ["A.11 Acceso no autorizado"]*8,
-    "Nivel dimensión": ["Alto"]*8,
-    "Nivel": ["Muy alto"]*8,
-    "NRA": ["Medio"]*8
-})
-
-st.dataframe(df_demo, use_container_width=True, height=350)
-
+    st.info("Sube el archivo Excel para comenzar.")
