@@ -108,6 +108,15 @@ file = st.file_uploader("📂 Subir Excel de riesgos", type=["xlsx", "xls", "xls
 if file is not None:
     try:
         df = pd.read_excel(file, engine="openpyxl")
+
+        # Forzamos conversión segura a datetime donde aplique
+        for col in df.columns:
+            if df[col].dtype == object:
+                try:
+                    df[col] = pd.to_datetime(df[col])
+                except:
+                    pass
+
         st.success("Archivo cargado correctamente")
 
         st.write("---")
@@ -125,11 +134,7 @@ if file is not None:
                 # ================================================
                 if series.dtype == object or series.nunique() < 20:
                     unique_vals = series.dropna().unique()
-
-                    # Convertimos todo a string para ordenar sin errores
                     unique_vals_str = sorted([str(v) for v in unique_vals])
-
-                    # Mapeo string → valor real
                     val_map = {str(v): v for v in unique_vals}
 
                     selected_str = st.multiselect(
@@ -139,7 +144,6 @@ if file is not None:
                     )
 
                     selected_real = [val_map[s] for s in selected_str]
-
                     filtered_df = filtered_df[filtered_df[col].isin(selected_real)]
                     continue
 
@@ -152,7 +156,7 @@ if file is not None:
 
                     date_range = st.date_input(
                         f"Rango de fechas para {col}:",
-                        value=(min_date, max_date)
+                        (min_date, max_date)
                     )
 
                     if isinstance(date_range, tuple) and len(date_range) == 2:
@@ -182,7 +186,7 @@ if file is not None:
                     continue
 
                 except:
-                    # Si no es numérico real (tipos mezclados)
+                    # Tipos mixtos → tratar como texto
                     unique_vals = series.dropna().unique()
                     unique_vals_str = sorted([str(v) for v in unique_vals])
                     val_map = {str(v): v for v in unique_vals}
@@ -194,34 +198,43 @@ if file is not None:
                     )
 
                     selected_real = [val_map[s] for s in selected_str]
-
                     filtered_df = filtered_df[filtered_df[col].isin(selected_real)]
                     continue
 
         st.write("---")
         st.subheader("📊 Vista de tabla filtrada")
 
+        # ======================
+        #   SLIDER PARA RECORRER FILAS
+        # ======================
         st.subheader("📌 Recorrer filas según filtros aplicados")
 
         total_rows = len(filtered_df)
 
-        if total_rows > 0:
+        if total_rows == 0:
+            st.warning("No hay filas para mostrar. Prueba quitando algunos filtros.")
+        else:
+            default_end = min(50, total_rows)
+
             row_start, row_end = st.slider(
                 "Selecciona rango de filas:",
-                0,
-                total_rows,
-                (0, min(50, total_rows)),
+                min_value=0,
+                max_value=total_rows,
+                value=(0, default_end),
                 step=1
             )
 
-            filtered_df = filtered_df.iloc[row_start:row_end]
-            
-        st.dataframe(
-            filtered_df,
-            use_container_width=True,
-            height=400,
-            hide_index=True
-        )
+            if row_start == row_end:
+                row_end = min(row_start + 1, total_rows)
+
+            subset_df = filtered_df.iloc[row_start:row_end].copy()
+
+            st.dataframe(
+                subset_df,
+                use_container_width=True,
+                height=450,
+                hide_index=True
+            )
 
     except Exception as e:
         st.error("Error al cargar el archivo. Verifique que sea un Excel válido.")
@@ -276,8 +289,6 @@ df_demo = pd.DataFrame({
 })
 
 st.dataframe(df_demo, use_container_width=True, height=350)
-
-
 
 
 
