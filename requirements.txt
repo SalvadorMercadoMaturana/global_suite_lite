@@ -1,11 +1,12 @@
 streamlit
 pandas
 openpyxl
-streamlit-aggrid
+st-aggrid
 plotly
 seaborn
 matplotlib
 streamlit-option-menu
+
 
 
 
