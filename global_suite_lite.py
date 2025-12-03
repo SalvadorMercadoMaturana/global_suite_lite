@@ -28,7 +28,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ======================
-#   SIDEBAR
+#   SIDEBAR – ICONOS
 # ======================
 with st.sidebar:
     selected = option_menu(
@@ -42,7 +42,7 @@ with st.sidebar:
 st.title("🔎 Análisis de Riesgos – Dashboard")
 
 # ======================
-#   BARRA DE FILTROS (NO AFECTA LA TABLA)
+#   BARRA DE FILTROS (filtros visuales)
 # ======================
 st.subheader("Filtros de análisis")
 
@@ -96,114 +96,134 @@ if not st.session_state.auth:
     st.stop()
 
 # ======================
-#   CARGAR EXCEL
+#   CARGAR EXCEL + FILTROS DINÁMICOS
 # ======================
 st.write("---")
 st.subheader("📋 Cargar matriz de riesgos")
 
-file = st.file_uploader("📂 Subir Excel", type=["xlsx", "xls", "xlsm"])
+file = st.file_uploader("📂 Subir Excel (.xlsx, .xls, .xlsm)", type=["xlsx", "xls", "xlsm"])
 
 if file is not None:
     try:
         df = pd.read_excel(file, engine="openpyxl")
+
         st.success("Archivo cargado correctamente")
 
+        # Conversión segura a datetime donde se pueda
+        for col in df.columns:
+            try:
+                df[col] = pd.to_datetime(df[col])
+            except:
+                pass
+
         st.write("---")
-        st.subheader("🎚 Segmentadores automáticos")
+        st.subheader("🎚 Segmentadores automáticos (modo PowerBI)")
 
-        filtered_df = df.copy()
+        # Aquí guardaremos las selecciones
+        user_filters = {}
 
+        # ============================
+        #   1) CONSTRUIR WIDGETS SIN FILTRAR
+        # ============================
         with st.expander("Mostrar / Ocultar filtros"):
 
             for col in df.columns:
-                series = filtered_df[col]  # clave: siempre desde filtered_df
+                col_series = df[col]
 
-                # ================================================
-                # 1) TEXTO / CATEGÓRICOS
-                # ================================================
-                if series.dtype == object or series.nunique() < 20:
-
-                    unique_vals = list(series.dropna().unique())
+                # ------------------------------
+                # 1) TEXTO / CATEGORÍAS
+                # ------------------------------
+                if col_series.dtype == object or col_series.nunique() < 20:
+                    unique_vals = list(col_series.dropna().unique())
                     unique_vals_str = sorted([str(v) for v in unique_vals])
                     val_map = {str(v): v for v in unique_vals}
 
                     selected_str = st.multiselect(
                         f"Filtrar {col}:",
                         unique_vals_str,
-                        unique_vals_str
+                        default=unique_vals_str
                     )
-
-                    selected_real = [val_map[s] for s in selected_str]
-
-                    filtered_df = filtered_df[filtered_df[col].isin(selected_real)]
+                    user_filters[col] = ("category", [val_map[s] for s in selected_str])
                     continue
 
-                # ================================================
+                # ------------------------------
                 # 2) FECHAS
-                # ================================================
-                if np.issubdtype(series.dtype, np.datetime64):
-
-                    min_date = series.min()
-                    max_date = series.max()
+                # ------------------------------
+                if np.issubdtype(col_series.dtype, np.datetime64):
+                    min_date = col_series.min()
+                    max_date = col_series.max()
 
                     date_tuple = st.date_input(
                         f"Rango de fechas para {col}:",
                         (min_date, max_date)
                     )
-
-                    if isinstance(date_tuple, tuple):
-                        start, end = date_tuple
-                        filtered_df = filtered_df[
-                            (series >= pd.to_datetime(start)) &
-                            (series <= pd.to_datetime(end))
-                        ]
+                    user_filters[col] = ("date", date_tuple)
                     continue
 
-                # ================================================
+                # ------------------------------
                 # 3) NUMÉRICOS
-                # ================================================
+                # ------------------------------
                 try:
-                    min_val = float(series.min())
-                    max_val = float(series.max())
+                    min_val = float(col_series.min())
+                    max_val = float(col_series.max())
 
                     sel_min, sel_max = st.slider(
                         f"Rango para {col}:",
                         min_val, max_val,
                         (min_val, max_val)
                     )
-
-                    filtered_df = filtered_df[
-                        (series >= sel_min) & (series <= sel_max)
-                    ]
+                    user_filters[col] = ("numeric", (sel_min, sel_max))
                     continue
 
                 except:
-                    # TIPOS MIXTOS — tratar como texto
-                    unique_vals = list(series.dropna().unique())
+                    # Tipos mixtos → tratar como categoría
+                    unique_vals = list(col_series.dropna().unique())
                     unique_vals_str = sorted([str(v) for v in unique_vals])
                     val_map = {str(v): v for v in unique_vals}
 
                     selected_str = st.multiselect(
                         f"Filtrar {col}:",
                         unique_vals_str,
-                        unique_vals_str
+                        default=unique_vals_str
                     )
-
-                    selected_real = [val_map[s] for s in selected_str]
-
-                    filtered_df = filtered_df[filtered_df[col].isin(selected_real)]
+                    user_filters[col] = ("category", [val_map[s] for s in selected_str])
                     continue
 
-        # ======================
-        #   SLIDER DE FILAS
-        # ======================
+        # ============================
+        #   2) APLICAR FILTROS EN UN SOLO PASO (PowerBI)
+        # ============================
+        filtered_df = df.copy()
+
+        for col, (ftype, fval) in user_filters.items():
+            series = filtered_df[col]
+
+            if ftype == "category":
+                filtered_df = filtered_df[series.isin(fval)]
+
+            elif ftype == "date":
+                start, end = fval
+                start = pd.to_datetime(start)
+                end = pd.to_datetime(end)
+                filtered_df = filtered_df[
+                    (series >= start) & (series <= end)
+                ]
+
+            elif ftype == "numeric":
+                low, high = fval
+                filtered_df = filtered_df[
+                    (series >= low) & (series <= high)
+                ]
+
+        # ============================
+        #   3) SLIDER PARA RECORRER FILAS
+        # ============================
         st.write("---")
         st.subheader("📌 Recorrer filas filtradas")
 
         total_rows = len(filtered_df)
 
         if total_rows == 0:
-            st.warning("No hay filas para mostrar. Quita o modifica los filtros.")
+            st.error("❌ No se encontraron filas con los filtros seleccionados.")
         else:
             default_end = min(50, total_rows)
 
@@ -222,8 +242,55 @@ if file is not None:
             st.dataframe(subset_df, use_container_width=True, height=450)
 
     except Exception as e:
-        st.error("Error al procesar el archivo.")
+        st.error("Error al procesar el Excel.")
         st.exception(e)
 
 else:
     st.info("Sube un archivo Excel para comenzar.")
+
+# ======================
+#   KPI + GRÁFICOS (inalterado)
+# ======================
+colA, colB, colC = st.columns([1,1,1])
+
+with colA:
+    st.subheader("Supera NRA")
+    st.markdown(
+        '<div class="metric-card"><div class="big-number">464</div><div class="small-text">de 1236</div></div>',
+        unsafe_allow_html=True
+    )
+
+with colB:
+    st.subheader("Distribución de Riesgos")
+    pie = px.pie(values=[40, 25, 20, 10, 5],
+                 names=["Muy alto","Alto","Medio","Bajo","Muy bajo"],
+                 color_discrete_sequence=px.colors.qualitative.Set2)
+    st.plotly_chart(pie, use_container_width=True)
+
+with colC:
+    st.subheader("Mapa de riesgo")
+    tree = px.treemap(
+        names=["Muy alto","Alto","Medio","Bajo","Muy bajo"],
+        parents=["","", "", "", ""],
+        values=[36,30,20,10,4],
+        color=[5,4,3,2,1],
+        color_continuous_scale="RdYlGn_r"
+    )
+    st.plotly_chart(tree, use_container_width=True)
+
+# ======================
+#   TABLA DEMO FINAL
+# ======================
+st.write("---")
+st.subheader("📋 Resultados de análisis")
+
+df_demo = pd.DataFrame({
+    "Análisis": ["Ciberseguridad"]*8,
+    "Elemento": ["AWS","App","Cita Previa","Aceso a Internet","Nóminas","Ciudadano","Operación","Banca Privada"],
+    "Riesgo": ["A.11 Acceso no autorizado"]*8,
+    "Nivel dimensión": ["Alto"]*8,
+    "Nivel": ["Muy alto"]*8,
+    "NRA": ["Medio"]*8
+})
+
+st.dataframe(df_demo, use_container_width=True, height=350)
