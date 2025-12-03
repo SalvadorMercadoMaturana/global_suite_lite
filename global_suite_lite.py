@@ -78,7 +78,7 @@ st.pyplot(fig)
 # ======================
 #   CONTRASEÑA DE ACCESO
 # ======================
-PASSWORD = "admin123"   # cámbiala aquí
+PASSWORD = "admin123"
 
 if "auth" not in st.session_state:
     st.session_state.auth = False
@@ -107,7 +107,7 @@ file = st.file_uploader("📂 Subir Excel de riesgos", type=["xlsx", "xls", "xls
 
 if file is not None:
     try:
-        df = pd.read_excel(file, sheet_name="Matriz", engine="openpyxl")
+        df = pd.read_excel(file, engine="openpyxl")
         st.success("Archivo cargado correctamente")
 
         st.write("---")
@@ -116,64 +116,87 @@ if file is not None:
         filtered_df = df.copy()
 
         with st.expander("Mostrar / Ocultar filtros"):
+
             for col in df.columns:
-                
-                # 1) FILTROS PARA TEXTO O COLUMNAS CATEGÓRICAS
-                if df[col].dtype == object or df[col].nunique() < 20:
-                    unique_vals = df[col].dropna().unique()
-                    
-                    # Convertimos a string solo para ordenar y mostrar
+                series = df[col]
+
+                # ================================================
+                # 1) TEXTO / CATEGÓRICAS
+                # ================================================
+                if series.dtype == object or series.nunique() < 20:
+                    unique_vals = series.dropna().unique()
+
+                    # Convertimos todo a string para ordenar sin errores
                     unique_vals_str = sorted([str(v) for v in unique_vals])
-                    
-                    # Creamos diccionario para mapear string → valor real original
+
+                    # Mapeo string → valor real
                     val_map = {str(v): v for v in unique_vals}
-                    
+
                     selected_str = st.multiselect(
                         f"Filtrar {col}:",
                         unique_vals_str,
                         default=unique_vals_str
                     )
-                    
-                    # Convertimos selección de string → valores reales
-                    selected_real = [val_map[s] for s in selected_str]
-                    
-                    filtered_df = filtered_df[filtered_df[col].isin(selected_real)]
 
-                    filtered_df = filtered_df[filtered_df[col].isin(vals)]
+                    selected_real = [val_map[s] for s in selected_str]
+
+                    filtered_df = filtered_df[filtered_df[col].isin(selected_real)]
                     continue
-            
-                # 2) FILTROS PARA FECHAS (datetime)
-                if np.issubdtype(df[col].dtype, np.datetime64):
-                    min_date = df[col].min()
-                    max_date = df[col].max()
-            
+
+                # ================================================
+                # 2) FECHAS
+                # ================================================
+                if np.issubdtype(series.dtype, np.datetime64):
+                    min_date = series.min()
+                    max_date = series.max()
+
                     date_range = st.date_input(
                         f"Rango de fechas para {col}:",
                         value=(min_date, max_date)
                     )
-            
-                    # Streamlit devuelve una tupla
+
                     if isinstance(date_range, tuple) and len(date_range) == 2:
                         start, end = date_range
                         filtered_df = filtered_df[
-                            (df[col] >= pd.to_datetime(start)) &
-                            (df[col] <= pd.to_datetime(end))
+                            (series >= pd.to_datetime(start)) &
+                            (series <= pd.to_datetime(end))
                         ]
                     continue
-            
-                # 3) FILTROS PARA NÚMEROS
-                min_val = float(df[col].min())
-                max_val = float(df[col].max())
-            
-                sel_min, sel_max = st.slider(
-                    f"Rango para {col}:",
-                    min_val, max_val,
-                    (min_val, max_val)
-                )
-            
-                filtered_df = filtered_df[
-                    (df[col] >= sel_min) & (df[col] <= sel_max)
-                ]
+
+                # ================================================
+                # 3) NUMÉRICOS
+                # ================================================
+                try:
+                    min_val = float(series.min())
+                    max_val = float(series.max())
+
+                    sel_min, sel_max = st.slider(
+                        f"Rango para {col}:",
+                        min_val, max_val,
+                        (min_val, max_val)
+                    )
+
+                    filtered_df = filtered_df[
+                        (series >= sel_min) & (series <= sel_max)
+                    ]
+                    continue
+
+                except:
+                    # Si no es numérico real (tipos mezclados)
+                    unique_vals = series.dropna().unique()
+                    unique_vals_str = sorted([str(v) for v in unique_vals])
+                    val_map = {str(v): v for v in unique_vals}
+
+                    selected_str = st.multiselect(
+                        f"Filtrar {col}:",
+                        unique_vals_str,
+                        default=unique_vals_str
+                    )
+
+                    selected_real = [val_map[s] for s in selected_str]
+
+                    filtered_df = filtered_df[filtered_df[col].isin(selected_real)]
+                    continue
 
         st.write("---")
         st.subheader("📊 Vista de tabla filtrada")
@@ -199,8 +222,10 @@ colA, colB, colC = st.columns([1,1,1])
 
 with colA:
     st.subheader("Supera NRA")
-    st.markdown('<div class="metric-card"><div class="big-number">464</div><div class="small-text">de 1236</div></div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        '<div class="metric-card"><div class="big-number">464</div><div class="small-text">de 1236</div></div>',
+        unsafe_allow_html=True
+    )
 
 with colB:
     st.subheader("Distribución de Riesgos")
@@ -221,7 +246,7 @@ with colC:
     st.plotly_chart(tree, use_container_width=True)
 
 # ======================
-#   TABLA DE DATOS
+#   TABLA DEMO FINAL
 # ======================
 st.write("---")
 st.subheader("📋 Resultados de análisis")
