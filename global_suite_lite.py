@@ -117,29 +117,49 @@ if file is not None:
 
         with st.expander("Mostrar / Ocultar filtros"):
             for col in df.columns:
-
-                # Si la columna tiene pocos valores, multiselect
+                
+                # 1) FILTROS PARA TEXTO O COLUMNAS CATEGÓRICAS
                 if df[col].dtype == object or df[col].nunique() < 20:
                     vals = st.multiselect(
                         f"Filtrar {col}:",
-                        df[col].dropna().unique(),
+                        sorted(df[col].dropna().unique()),
                         default=list(df[col].dropna().unique())
                     )
                     filtered_df = filtered_df[filtered_df[col].isin(vals)]
-
-                else:
-                    # Si es numérica: slider rango
-                    min_val = float(df[col].min())
-                    max_val = float(df[col].max())
-                    sel_min, sel_max = st.slider(
-                        f"Rango para {col}:",
-                        min_val, max_val,
-                        (min_val, max_val)
+                    continue
+            
+                # 2) FILTROS PARA FECHAS (datetime)
+                if np.issubdtype(df[col].dtype, np.datetime64):
+                    min_date = df[col].min()
+                    max_date = df[col].max()
+            
+                    date_range = st.date_input(
+                        f"Rango de fechas para {col}:",
+                        value=(min_date, max_date)
                     )
-                    filtered_df = filtered_df[
-                        (filtered_df[col] >= sel_min) &
-                        (filtered_df[col] <= sel_max)
-                    ]
+            
+                    # Streamlit devuelve una tupla
+                    if isinstance(date_range, tuple) and len(date_range) == 2:
+                        start, end = date_range
+                        filtered_df = filtered_df[
+                            (df[col] >= pd.to_datetime(start)) &
+                            (df[col] <= pd.to_datetime(end))
+                        ]
+                    continue
+            
+                # 3) FILTROS PARA NÚMEROS
+                min_val = float(df[col].min())
+                max_val = float(df[col].max())
+            
+                sel_min, sel_max = st.slider(
+                    f"Rango para {col}:",
+                    min_val, max_val,
+                    (min_val, max_val)
+                )
+            
+                filtered_df = filtered_df[
+                    (df[col] >= sel_min) & (df[col] <= sel_max)
+                ]
 
         st.write("---")
         st.subheader("📊 Vista de tabla filtrada")
@@ -202,5 +222,6 @@ df_demo = pd.DataFrame({
 })
 
 st.dataframe(df_demo, use_container_width=True, height=350)
+
 
 
