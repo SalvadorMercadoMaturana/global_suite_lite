@@ -201,6 +201,21 @@ if file is not None:
         st.write("---")
         st.subheader("📊 Vista de tabla filtrada")
 
+        st.subheader("📌 Recorrer filas según filtros aplicados")
+
+        total_rows = len(filtered_df)
+
+        if total_rows > 0:
+            row_start, row_end = st.slider(
+                "Selecciona rango de filas:",
+                0,
+                total_rows,
+                (0, min(50, total_rows)),
+                step=1
+            )
+
+            filtered_df = filtered_df.iloc[row_start:row_end]
+            
         st.dataframe(
             filtered_df,
             use_container_width=True,
@@ -261,6 +276,7 @@ df_demo = pd.DataFrame({
 })
 
 st.dataframe(df_demo, use_container_width=True, height=350)
+
 
 
 
